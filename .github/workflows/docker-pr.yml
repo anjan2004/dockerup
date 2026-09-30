@@ -1,0 +1,58 @@
+name: Docker PR CI
+
+# Trigger whenever a Pull Request is opened, updated (synchronize), or reopened targeting main
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+  # Allows you to trigger this workflow manually from GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  docker-up:
+    name: Build & Docker Up on PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Up (Build & Start Container)
+        run: |
+          echo "🚀 Pull Request detected. Running docker compose up..."
+          docker compose up -d --build
+
+      - name: Check Container Status
+        run: |
+          echo "📋 Checking running containers..."
+          docker compose ps
+          docker ps
+
+      - name: Health Check / Verify App is Running
+        run: |
+          echo "⏳ Waiting for service to respond..."
+          sleep 5
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8085)
+          echo "🌐 HTTP response status code: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "❌ Health check failed! Expected 200, got $HTTP_STATUS"
+            docker compose logs
+            exit 1
+          fi
+          echo "✅ Container is UP and serving traffic successfully!"
+
+      - name: Print Container Logs
+        if: always()
+        run: |
+          echo "📜 Docker logs:"
+          docker compose logs
+
+      - name: Docker Down (Cleanup)
+        if: always()
+        run: |
+          echo "🧹 Cleaning up containers..."
+          docker compose down --volumes
